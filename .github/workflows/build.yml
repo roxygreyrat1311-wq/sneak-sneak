@@ -1,0 +1,63 @@
+name: Build Fabric Mod
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Show repo layout
+        run: |
+          pwd
+          ls -la
+          find src -type f | sort
+
+      - name: Build JAR
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x gradlew
+            ./gradlew build
+          else
+            gradle build
+          fi
+
+      - name: Verify JAR is a valid Fabric mod
+        run: |
+          ls -la build/libs
+          JAR=$(ls build/libs/*.jar | grep -v -- '-sources' | head -n1)
+          echo "Checking: $JAR"
+          unzip -l "$JAR"
+          echo "---- fabric.mod.json ----"
+          unzip -p "$JAR" fabric.mod.json
+          unzip -l "$JAR" | grep -q "fabric.mod.json" || { echo "ERROR: fabric.mod.json tidak ada di jar"; exit 1; }
+          unzip -l "$JAR" | grep -q "AimAssistClient.class" || { echo "ERROR: class AimAssistClient tidak ada di jar"; exit 1; }
+          unzip -p "$JAR" fabric.mod.json | grep -q '\${version}' && { echo "ERROR: \${version} belum ter-expand"; exit 1; }
+          echo "OK: jar valid"
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: AimAssist-Mod
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+          if-no-files-found: error
